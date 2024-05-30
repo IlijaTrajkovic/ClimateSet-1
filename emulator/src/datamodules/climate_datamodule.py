@@ -55,7 +55,6 @@ class ClimateDataModule(LightningDataModule):
         test_models: Union[List[str], None] = None,
         batch_size: int = 16,
         eval_batch_size: int = 64,
-        emissions_tracker:bool = False,
         num_workers: int = 0,
         pin_memory: bool = False,
         load_train_into_mem: bool = True,
@@ -101,7 +100,7 @@ class ClimateDataModule(LightningDataModule):
             for scenario in test_scenarios
             for model in self.test_models
         ]
-        self.emissions_tracker = self.hparams.emissions_tracker
+
         print("Test Sets: ", self.test_set_names)
 
         self._data_train = None
@@ -175,8 +174,22 @@ class ClimateDataModule(LightningDataModule):
 
         # Prediction set:
         if stage == "predict":
-            print("Prediction Set not yet implemented. Using Test Set.")
-            self._data_predict = self._data_test
+            self.setup_predict_data(dataset_kwargs)
+
+    def setup_predict_data(self, dataset_kwargs):
+        """Load prediction data."""
+        self._data_predict = [
+            ClimateDataset(
+                years=self.hparams.test_years,
+                mode="test",#changed here from predict to test because predict doesn't exist
+                scenarios=predict_scenario,
+                climate_model=predict_model,
+                load_data_into_mem=self.hparams.load_test_into_mem,
+                **dataset_kwargs,
+            )
+            for predict_scenario in self.hparams.test_scenarios
+            for predict_model in self.test_models
+        ]
 
     def on_before_batch_transfer(self, batch, dataloader_idx):
         return batch
@@ -222,12 +235,16 @@ class ClimateDataModule(LightningDataModule):
             for ds_test in self._data_test
         ]
 
-    def predict_dataloader(self) -> EVAL_DATALOADERS:
-        return [
-            DataLoader(dataset=self._data_val, **self._shared_eval_dataloader_kwargs())
-            if self._data_val is not None
-            else None
-        ]
+    def predict_dataloader(self) -> List[DataLoader]:
+        print(self._data_predict)
+        if self._data_predict is None:
+            return None
+        else:
+            #creates a list of dataloaders for each prediction dataset
+            return [
+                DataLoader(dataset=predict_ds, **self._shared_eval_dataloader_kwargs())
+                for predict_ds in self._data_predict
+            ]
 
 
 if __name__ == "__main__":

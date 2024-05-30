@@ -5,7 +5,8 @@ import numpy as np
 import time
 
 from typing import Optional, List, Any, Dict, Tuple, Union
-from codecarbon import EmissionsTracker
+
+from emulator.src.core.analysis import PredictionMetrics
 
 from omegaconf import DictConfig
 import omegaconf
@@ -18,7 +19,6 @@ from emulator.src.utils.utils import get_loss_function, get_logger, to_DictConfi
 # from emulator.src.utils.interface import reload_model_from_id
 from emulator.src.core.callbacks import PredictionPostProcessCallback
 from timm.optim import create_optimizer_v2
-
 
 
 class BaseModel(LightningModule):
@@ -52,7 +52,6 @@ class BaseModel(LightningModule):
         self.log_text = get_logger(__name__)
         self.log_text.info("Base Model init!")
 
-        self.track_emissions = datamodule_config.get("emissions_tracker")
         self.name = name
         self.verbose = verbose
         self.test_step_outputs = {}
@@ -64,6 +63,9 @@ class BaseModel(LightningModule):
         self.log_text.info(f"Super Emulation: {self.super_emulation}")
         self.super_decoder = super_decoder
         self.log_text.info(f"Super Decoder: {self.super_decoder}")
+
+        self.predictions = []
+        self.targets = []  
 
         if datamodule_config is not None:
             # get information from data config
@@ -97,23 +99,16 @@ class BaseModel(LightningModule):
 
     def on_train_start(self) -> None:
         self.log_text.info("Starting Training")
-        print("Emission tracker: ",self.track_emissions)
-        # if(self.track_emissions):
-        #     self.tracker = EmissionsTracker()
-        #     self.tot_co2_emission = 0
-
 
     def on_train_epoch_start(self) -> None:
-        # if(self.track_emissions):
-        #     self.tracker.start()
         self._start_epoch_time = time.time()
 
-    def predict(self, X, idx, *args, **kwargs):
+    def predict_me(self, X, idx, *args, **kwargs):
         # x (batch_size, time, lon, lat, num_features)
         # TODO if we want to apply any input normalization or other stuff we should do it here
 
         # if idx is None or if we do not have a decoder
-
+        print("predict_me")
         if self.super_decoder:
             assert idx is not None, "Super Decoder but model index is None"
             preds = self(X, idx)
@@ -135,7 +130,7 @@ class BaseModel(LightningModule):
             X, Y = batch
             idx = None
 
-        preds = self.predict(X, idx)
+        preds = self._me(X, idx)
         # dict with keys being the output var ids
         Y = self.output_postprocesser.split_vector_by_variable(
             Y
@@ -183,9 +178,6 @@ class BaseModel(LightningModule):
 
     def on_train_epoch_end(self):
         train_time = time.time() - self._start_epoch_time
-        # if(self.track_emissions):
-        #     self.tot_co2_emission += self.tracker.stop()
-        #     self.log("co2_emission", self.tot_co2_emission)
         self.log_dict({"epoch": self.current_epoch, "time/train": train_time})
 
     def _evaluation_step(self, batch: Any, batch_idx: int):
@@ -195,7 +187,7 @@ class BaseModel(LightningModule):
             X, Y = batch
             idx = None
 
-        preds = self.predict(X, idx)
+        preds = self.predict_me(X, idx)
         ret = {"targets": Y, "preds": preds}
 
         self.val_step_outputs.append(ret)
@@ -233,7 +225,9 @@ class BaseModel(LightningModule):
         self._start_validation_epoch_time = time.time()
 
     def validation_step(self, batch: Any, batch_idx: int, dataloader_idx: int = None):
-        return self._evaluation_step(batch, batch_idx)
+        ret = self._evaluation_step(batch, batch_idx)
+        self.val_step_outputs.append(ret)
+        return ret
 
     def on_validation_epoch_end(self) -> dict:
         val_time = time.time() - self._start_validation_epoch_time
@@ -254,16 +248,19 @@ class BaseModel(LightningModule):
         return val_stats
 
     def on_test_epoch_start(self) -> None:
+        print("test started")
         self._start_test_epoch_time = time.time()
         for i, _ in enumerate(self.trainer.datamodule.test_set_names):
             self.test_step_outputs[i] = []  # initialize output collection
 
     def test_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0):
+        print("test step")
         ret = self._evaluation_step(batch, batch_idx)
         self.test_step_outputs[dataloader_idx].append(ret)  # collect for evaluation
         return ret
 
     def on_test_epoch_end(self) -> dict:
+        print("test end")
         test_time = time.time() - self._start_test_epoch_time
         self.log("time/test", test_time)
 
@@ -296,47 +293,50 @@ class BaseModel(LightningModule):
         self.test_step_outputs.clear()
         return main_test_stats
 
-    def aggregate_predictions(
-        self, results: List[Any]
-    ) -> Dict[int, Dict[str, Dict[str, np.ndarray]]]:
-        """
-        Args:
-         results: The list that pl.Trainer() returns when predicting, i.e.
-                        results = trainer.predict(model, datamodule)
-        Returns:
-            A dict mapping prediction_set_name_i -> {'targets': t_i, 'preds': p_i}
-                for each prediction subset i .
-                E.g.: To access the shortwave heating rate predictions for year 2012:
-                    model, datamodule, trainer = ...
-                    datamodule.predict_years = "2012"
-                    results = trainer.predict(model, datamodule)
-                    results = model.aggregate_predictions(results)
-                    sw_hr_preds_2012 = results[2012]['preds']['hrsc']
-        """
-        if not isinstance(results[0], list):
-            results = [results]  # when only a single predict dataloader is passed
-        per_subset_outputs = dict()
-        for pred_set_name, predict_subset_outputs in zip(
-            self.trainer.datamodule.predict_years, results
-        ):
-            Y, preds = self._evaluation_get_preds(predict_subset_outputs)
-            per_subset_outputs[pred_set_name]["preds"] = preds
-            per_subset_outputs[pred_set_name]["targets"] = Y
-        return per_subset_outputs
+    def aggregate_predictions(self):
+        # Example of aggregation: flattening or concatenating list of arrays
+        self.predictions = np.concatenate(self.predictions, axis=0) if self.predictions else np.array([])
+        self.targets = np.concatenate(self.targets, axis=0) if self.targets else np.array([])
 
-    def predict_step(self, batch: Any, batch_idx: int, dataloader_idx: int = None):
-        return self._evaluation_step(batch, batch_idx)
+        # Ensure predictions and targets are of the same length, handle mismatch here
+        # This is just an example strategy, could be changed later
+        min_length = min(len(self.predictions), len(self.targets))
+        self.predictions = self.predictions[:min_length]
+        self.targets = self.targets[:min_length]
+    
+    def on_predict_epoch_start(self) -> None:
+        print("predict start")
+        self.predictions = []
+        self.targets = []
 
-    def on_predict_epoch_end(
-        self, results: List[Any]
-    ) -> Dict[int, Dict[str, Dict[str, np.ndarray]]]:
-        return self.aggregate_predictions(results)
+    def predict_step(self, batch, batch_idx, dataloader_idx: int = None):
+        print("predict step")
+        X, Y = batch
+        preds = self(X)  # Model makes predictions based on input X
+        self.predictions.append(preds.cpu().numpy())  # Append predictions to list
+        self.targets.append(Y.cpu().numpy())  # Append targets to list
+    
+    def on_predict_epoch_end(self, predictions=None):
+        # Aggregate predictions to ensure consistency in shape and size
+        self.aggregate_predictions()
 
-    def predict_step(self, batch: Any, batch_idx: int, dataloader_idx: int = None):
-        return self._evaluation_step(batch, batch_idx)
+        print("predict end")
+
+        # Calculate average errors and other metrics
+        pm = PredictionMetrics(predictions=self.predictions, targets=self.targets)
+        results = pm.perform_analysis(["mse", "llrmse"])
+        print(results)
+        return results
+
+    def evaluate_with_custom_metrics(self, Ytrue, preds):
+        results = {}
+        for metric_fn in self.custom_metrics:
+            result = metric_fn(Ytrue, preds)
+            results.update(result)
+        return results
 
     def configure_optimizers(self):
-        # configuring optimizer and lr schedul from dict configs
+        # configuring optimizer and lr schedule from dict configs
 
         if "_target_" in to_DictConfig(self.hparams.optimizer).keys():
             self.hparams.optimizer.name = str(

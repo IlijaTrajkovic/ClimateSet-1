@@ -1,0 +1,36 @@
+cd ClimateSet
+python -m venv env_emulator
+source env_emulator/bin/activate
+pip install -r requirements.txt
+cd emulator
+pip install -e .
+export PYTHONPATH=$PYTHONPATH:/home/uzwnx/ClimateSet
+
+python emulator/run.py experiment=finetuning_emulator/climax/NorESM2-LM_FGOALS-f3-L_climax_tas+pr_run-01.yaml seed=3423 logger=none
+
+python run.py logger=none
+python emulator/run.py experiment=single_emulator/climax/NorESM2-LM_climax_tas+pr_run-01.yaml logger=none seed=3423 - works
+python emulator/run.py  experiment=single_emulator/climax/NorESM2-LM_climax_tas+pr_run-01 model.pretrained_run_id="yl98ae9t" model.pretrained_ckpt_dir='"pretrained_models/single_emulator/ClimaX/NorESM2-LM_climax_run1_single_emulator_tas+pr/yl98ae9t/checkpoints/epoch=49-step=2950.ckpt"' model.finetune=True
+
+
+Climax requirement:
+
+
+cd ClimateSet
+python -m venv env_climax
+source env_climax/bin/activate
+pip install -r requirements_climax.txt
+cd emulator
+pip install -e .
+export PYTHONPATH=$PYTHONPATH:/home/uzwnx/ClimateSet
+
+
+python run.py experiment=test
+
+
+python emulator/run.py experiment=single_emulator/unet/NorESM2-LM_unet_tas+pr_run-01.yaml logger=none seed=3423
+
+edit basemodel.py edit prediction teil, ist gleich wie test teil aber wir mussen die eigentliche daten rausgeben, nicht die loss funktion. Fulle die funktionen die aufgrufen werden aus (implementiere die)
+
+create predict.py (wie run.py aber es ruft emulator.predict)
+und speichere daten die herausgegeben werden (in predict.py implementieren diese funktion)
