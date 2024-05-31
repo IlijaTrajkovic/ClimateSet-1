@@ -308,6 +308,7 @@ class BaseModel(LightningModule):
         print("predict start")
         self.predictions = []
         self.targets = []
+<<<<<<< Updated upstream
 
     def predict_step(self, batch, batch_idx, dataloader_idx: int = None):
         print("predict step")
@@ -327,6 +328,44 @@ class BaseModel(LightningModule):
         results = pm.perform_analysis(["mse", "llrmse"])
         print(results)
         return results
+=======
+        self.predictions_metadata = []
+
+
+    def predict_step(self, batch, batch_idx, dataloader_idx: int = None):
+        print("predict step")
+        X, Y, metadata = batch
+        
+        preds = self(X)  # Model makes predictions based on input X
+        self.predictions.append(preds)  # Append torch tensor predictions directly
+        self.targets.append(Y)  # Append torch tensor targets directly
+
+        # Collect metadata
+        batch_metadata = {
+            'year': metadata['year'],
+            'scenario': metadata['scenario'],
+            'output_variable': metadata['output_variable']
+        }
+        self.predictions_metadata.append(batch_metadata)
+
+    
+    def on_predict_epoch_end(self, predictions):
+        # Convert torch tensors to numpy before aggregation and analysis
+        self.predictions = [p.cpu().numpy() for p in self.predictions]
+        self.targets = [t.cpu().numpy() for t in self.targets]
+
+        # Aggregate predictions to ensure consistency in shape and size
+        #self.aggregate_predictions()
+        #self.predictions = [np.mean(prediction, axis=1) for prediction in self.predictions]
+
+        print("predict end")
+
+        # Calculate average errors and other metrics
+        #pm = PredictionMetrics(predictions=self.predictions, targets=self.targets)
+        #results = pm.perform_analysis(["mse", "llrmse"])
+        #print(results)
+        #return results
+>>>>>>> Stashed changes
 
     def evaluate_with_custom_metrics(self, Ytrue, preds):
         results = {}

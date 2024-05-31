@@ -82,8 +82,11 @@ def predict_model(model, data, config: DictConfig):
     if config.get("print_config"):
         cfg_utils.print_config(config, fields="all")
 
+<<<<<<< Updated upstream
     print(data)
 
+=======
+>>>>>>> Stashed changes
     loggers = cfg_utils.get_all_instantiable_hydra_modules(config, "logger")
 
     # Init Lightning trainer

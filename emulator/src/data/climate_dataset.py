@@ -83,6 +83,7 @@ class ClimateDataset(torch.utils.data.Dataset):
 
         self.scenarios = scenarios
         self.num_ensembles = num_ensembles
+        self.out_variables = out_variables
 
         if isinstance(years, int):
             self.years = years
@@ -378,8 +379,15 @@ class ClimateDataset(torch.utils.data.Dataset):
             # Y_norm = self.output_transforms(self.Y[index])
             X = raw_Xs
             Y = raw_Ys
+        """added metadata here"""
+        # Create metadata
+        metadata = {
+            'year': self.years[index % len(self.years)],
+            'scenario': self.scenarios[index // len(self.years) % len(self.scenarios)],
+            'output_variable': self.out_variables
+        }
 
-        return X, Y
+        return X, Y, metadata
 
     def __str__(self):
         s = f" {self.name} dataset: {self.n_years} years used, with a total size of {len(self)} examples."
