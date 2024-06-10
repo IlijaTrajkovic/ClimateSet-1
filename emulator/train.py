@@ -82,11 +82,6 @@ def predict_model(model, data, config: DictConfig):
     if config.get("print_config"):
         cfg_utils.print_config(config, fields="all")
 
-<<<<<<< Updated upstream
-    print(data)
-
-=======
->>>>>>> Stashed changes
     loggers = cfg_utils.get_all_instantiable_hydra_modules(config, "logger")
 
     # Init Lightning trainer
@@ -95,7 +90,6 @@ def predict_model(model, data, config: DictConfig):
         logger=loggers
     )
     print("got trainer")
-    print(trainer)
     trainer.predict(model=model, datamodule=data) #ckpt-best needed???
 
     if config.get("logger") and config.logger.get("wandb"):

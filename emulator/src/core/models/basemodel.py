@@ -295,45 +295,23 @@ class BaseModel(LightningModule):
 
     def aggregate_predictions(self):
         # Example of aggregation: flattening or concatenating list of arrays
-        self.predictions = np.concatenate(self.predictions, axis=0) if self.predictions else np.array([])
-        self.targets = np.concatenate(self.targets, axis=0) if self.targets else np.array([])
+        predictions = np.concatenate(self.predictions, axis=0) if self.predictions else np.array([])
+        targets = np.concatenate(self.targets, axis=0) if self.targets else np.array([])
 
         # Ensure predictions and targets are of the same length, handle mismatch here
         # This is just an example strategy, could be changed later
-        min_length = min(len(self.predictions), len(self.targets))
-        self.predictions = self.predictions[:min_length]
-        self.targets = self.targets[:min_length]
+        min_length = min(len(predictions), len(targets))
+        predictions = predictions[:min_length]
+        targets = targets[:min_length]
+        return predictions, targets
     
     def on_predict_epoch_start(self) -> None:
-        print("predict start")
         self.predictions = []
         self.targets = []
-<<<<<<< Updated upstream
-
-    def predict_step(self, batch, batch_idx, dataloader_idx: int = None):
-        print("predict step")
-        X, Y = batch
-        preds = self(X)  # Model makes predictions based on input X
-        self.predictions.append(preds.cpu().numpy())  # Append predictions to list
-        self.targets.append(Y.cpu().numpy())  # Append targets to list
-    
-    def on_predict_epoch_end(self, predictions=None):
-        # Aggregate predictions to ensure consistency in shape and size
-        self.aggregate_predictions()
-
-        print("predict end")
-
-        # Calculate average errors and other metrics
-        pm = PredictionMetrics(predictions=self.predictions, targets=self.targets)
-        results = pm.perform_analysis(["mse", "llrmse"])
-        print(results)
-        return results
-=======
         self.predictions_metadata = []
 
 
     def predict_step(self, batch, batch_idx, dataloader_idx: int = None):
-        print("predict step")
         X, Y, metadata = batch
         
         preds = self(X)  # Model makes predictions based on input X
@@ -349,23 +327,21 @@ class BaseModel(LightningModule):
         self.predictions_metadata.append(batch_metadata)
 
     
-    def on_predict_epoch_end(self, predictions):
+    def on_predict_epoch_end(self, predictions = None):
         # Convert torch tensors to numpy before aggregation and analysis
         self.predictions = [p.cpu().numpy() for p in self.predictions]
         self.targets = [t.cpu().numpy() for t in self.targets]
 
         # Aggregate predictions to ensure consistency in shape and size
-        #self.aggregate_predictions()
-        #self.predictions = [np.mean(prediction, axis=1) for prediction in self.predictions]
+        predictions, targets = self.aggregate_predictions()
+        #predictions = [np.mean(prediction, axis=1) for prediction in predictions]
 
-        print("predict end")
 
         # Calculate average errors and other metrics
-        #pm = PredictionMetrics(predictions=self.predictions, targets=self.targets)
-        #results = pm.perform_analysis(["mse", "llrmse"])
-        #print(results)
-        #return results
->>>>>>> Stashed changes
+        pm = PredictionMetrics(predictions=predictions, targets=targets)
+        results = pm.perform_analysis(["mse", "llrmse"])
+        print(results)
+        return results
 
     def evaluate_with_custom_metrics(self, Ytrue, preds):
         results = {}

@@ -10,8 +10,35 @@ class PredictionMetrics:
         return np.mean(np.square(self.predictions - self.targets))
 
     def calculate_llrmse(self):
-        """Calculate Log-likelihood Root Mean Squared Error (LLRMSE) between predictions and targets."""
-        return np.sqrt(np.mean(np.square(np.log1p(self.predictions) - np.log1p(self.targets))))
+        """
+        Calculate Log-likelihood Root Mean Squared Error (LLRMSE) between predictions and targets.
+        Adjustments are made to avoid -inf and inf outcomes from log calculations.
+        """
+        # Ensure values are greater than -1 to safely apply np.log1p (log(1+x))
+        predictions = np.clip(self.predictions, a_min=0, a_max=None)
+        targets = np.clip(self.targets, a_min=0, a_max=None)
+
+        # Handle NaNs and infs by replacing them with the median of the remaining valid values
+        if np.any(np.isnan(predictions)) or np.any(np.isinf(predictions)):
+            valid_pred = predictions[np.isfinite(predictions)]
+            median_pred = np.median(valid_pred) if valid_pred.size > 0 else 0
+            predictions = np.nan_to_num(predictions, nan=median_pred, posinf=median_pred, neginf=median_pred)
+
+        if np.any(np.isnan(targets)) or np.any(np.isinf(targets)):
+            valid_targ = targets[np.isfinite(targets)]
+            median_targ = np.median(valid_targ) if valid_targ.size > 0 else 0
+            targets = np.nan_to_num(targets, nan=median_targ, posinf=median_targ, neginf=median_targ)
+
+        # Compute log1p of clipped and cleaned predictions and targets
+        log_predictions = np.log1p(predictions)
+        log_targets = np.log1p(targets)
+
+        # Calculate LLRMSE
+        llrmse = np.sqrt(np.mean(np.square(log_predictions - log_targets)))
+
+        return llrmse
+
+
 
     def custom_metric_1(self):
         """Implement your custom metric 1."""

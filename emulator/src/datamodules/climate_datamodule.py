@@ -64,6 +64,7 @@ class ClimateDataModule(LightningDataModule):
         seq_len: int = SEQ_LEN_MAPPING[TEMP_RES],
         output_save_dir: Optional[str] = DATA_DIR,
         num_ensembles: int = 1,  # 1 for first ensemble, -1 for all
+        emissions_tracker: bool = False,
         lon: int = LON,
         lat: int = LAT,
         num_levels: int = NUM_LEVELS,
@@ -91,6 +92,7 @@ class ClimateDataModule(LightningDataModule):
         # self.input_transform = input_transform  # self.hparams.input_transform
         # self.normalizer = normalizer
 
+        self.emissions_tracker = emissions_tracker
         self._data_train: Optional[ClimateDataset] = None
         self._data_val: Optional[ClimateDataset] = None
         self._data_test: Optional[List[ClimateDataset]] = None
